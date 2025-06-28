@@ -80,3 +80,5 @@ docs/_build/
 # Alembic
 alembic/versions/*.py
 !alembic/versions/.gitkeep
+
+zsimplify_deployment_guide.txt

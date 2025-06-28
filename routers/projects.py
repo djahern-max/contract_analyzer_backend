@@ -1,7 +1,7 @@
-# routers/projects.py
+# routers/projects.py - Updated with job_number support
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 from database import get_db
 from models.user import User
@@ -12,15 +12,17 @@ from routers.auth import get_current_active_user
 router = APIRouter()
 
 
-# Pydantic models
+# Updated Pydantic models
 class ProjectCreate(BaseModel):
     name: str
     description: str = None
+    job_number: Optional[str] = None  # NEW: job_number field
 
 
 class ProjectUpdate(BaseModel):
     name: str = None
     description: str = None
+    job_number: Optional[str] = None  # NEW: job_number field
 
 
 class ContractResponse(BaseModel):
@@ -37,6 +39,7 @@ class ProjectResponse(BaseModel):
     id: int
     name: str
     description: str = None
+    job_number: Optional[str] = None  # NEW: job_number field
     created_at: str
     contract_count: int = 0
     contracts: List[ContractResponse] = []
@@ -57,6 +60,7 @@ async def create_project(
         user_id=current_user.id,
         name=project_data.name,
         description=project_data.description,
+        job_number=project_data.job_number,  # NEW: Include job_number
     )
 
     db.add(project)
@@ -67,6 +71,7 @@ async def create_project(
         id=project.id,
         name=project.name,
         description=project.description,
+        job_number=project.job_number,  # NEW: Include in response
         created_at=project.created_at.isoformat(),
         contract_count=0,
         contracts=[],
@@ -82,6 +87,12 @@ async def get_user_projects(
 
     project_responses = []
     for project in projects:
+        # Count contracts for this project
+        contract_count = (
+            db.query(Contract).filter(Contract.project_id == project.id).count()
+        )
+
+        # Get contracts for this project
         contracts = db.query(Contract).filter(Contract.project_id == project.id).all()
         contract_responses = [
             ContractResponse(
@@ -98,8 +109,9 @@ async def get_user_projects(
                 id=project.id,
                 name=project.name,
                 description=project.description,
+                job_number=project.job_number,  # NEW: Include in response
                 created_at=project.created_at.isoformat(),
-                contract_count=len(contracts),
+                contract_count=contract_count,
                 contracts=contract_responses,
             )
         )
@@ -113,7 +125,7 @@ async def get_project(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Get a specific project with its contracts"""
+    """Get a specific project"""
     project = (
         db.query(Project)
         .filter(Project.id == project_id, Project.user_id == current_user.id)
@@ -125,6 +137,12 @@ async def get_project(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
 
+    # Count contracts for this project
+    contract_count = (
+        db.query(Contract).filter(Contract.project_id == project.id).count()
+    )
+
+    # Get contracts for this project
     contracts = db.query(Contract).filter(Contract.project_id == project.id).all()
     contract_responses = [
         ContractResponse(
@@ -140,8 +158,9 @@ async def get_project(
         id=project.id,
         name=project.name,
         description=project.description,
+        job_number=project.job_number,  # NEW: Include in response
         created_at=project.created_at.isoformat(),
-        contract_count=len(contracts),
+        contract_count=contract_count,
         contracts=contract_responses,
     )
 
@@ -165,14 +184,23 @@ async def update_project(
             status_code=status.HTTP_404_NOT_FOUND, detail="Project not found"
         )
 
+    # Update fields if provided
     if project_data.name is not None:
         project.name = project_data.name
     if project_data.description is not None:
         project.description = project_data.description
+    if project_data.job_number is not None:  # NEW: Update job_number
+        project.job_number = project_data.job_number
 
     db.commit()
     db.refresh(project)
 
+    # Count contracts for this project
+    contract_count = (
+        db.query(Contract).filter(Contract.project_id == project.id).count()
+    )
+
+    # Get contracts for this project
     contracts = db.query(Contract).filter(Contract.project_id == project.id).all()
     contract_responses = [
         ContractResponse(
@@ -188,8 +216,9 @@ async def update_project(
         id=project.id,
         name=project.name,
         description=project.description,
+        job_number=project.job_number,  # NEW: Include in response
         created_at=project.created_at.isoformat(),
-        contract_count=len(contracts),
+        contract_count=contract_count,
         contracts=contract_responses,
     )
 
@@ -200,7 +229,7 @@ async def delete_project(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Delete a project and all its contracts"""
+    """Delete a project"""
     project = (
         db.query(Project)
         .filter(Project.id == project_id, Project.user_id == current_user.id)
