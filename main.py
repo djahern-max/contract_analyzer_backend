@@ -12,7 +12,7 @@ from database import engine
 from models import Base
 
 # Import routers
-from routers import auth, projects
+from routers import auth, projects, contracts
 
 # from routers import documents, analysis  # We'll add these next
 
@@ -37,6 +37,8 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(projects.router, prefix="/api/projects", tags=["Projects"])
+app.include_router(contracts.router, prefix="/api/contracts", tags=["Contracts"])
 
 
 # Root endpoints

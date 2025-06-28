@@ -7,6 +7,7 @@ import os
 import PyPDF2
 import asyncio
 from typing import Dict, Any, Optional
+from pathlib import Path
 
 
 class ContractAnalyzer:
@@ -23,6 +24,58 @@ class ContractAnalyzer:
         # Ollama configuration
         self.ollama_url = os.getenv("OLLAMA_BASE_URL")
         self.model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+
+    async def analyze_contract_from_local_file(self, file_path: str) -> Dict[str, Any]:
+        """Analyze a local contract file"""
+
+        print(f"🔍 Starting analysis of: {file_path}")
+
+        try:
+            # Step 1: Extract text from local file
+            contract_text = await self._extract_text_from_local_file(file_path)
+            print(f"✅ Extracted text ({len(contract_text)} characters)")
+
+            if len(contract_text.strip()) < 100:
+                return {
+                    "success": False,
+                    "error": "Contract text too short - might be an image-based PDF or empty file",
+                    "file_path": file_path,
+                }
+
+            # Step 2: Analyze with Ollama
+            analysis_results = {}
+
+            # Summary analysis
+            print("📋 Running summary analysis...")
+            summary = await self._analyze_with_ollama(contract_text, "summary")
+            analysis_results["summary"] = summary
+
+            # Risk analysis
+            print("⚠️ Running risk analysis...")
+            risks = await self._analyze_with_ollama(contract_text, "risks")
+            analysis_results["risks"] = risks
+
+            # Terms analysis
+            print("📄 Running terms analysis...")
+            terms = await self._analyze_with_ollama(contract_text, "terms")
+            analysis_results["terms"] = terms
+
+            print("✅ All analyses complete!")
+            return {
+                "success": True,
+                "file_path": file_path,
+                "analysis": analysis_results,
+                "text_length": len(contract_text),
+                "text_preview": (
+                    contract_text[:500] + "..."
+                    if len(contract_text) > 500
+                    else contract_text
+                ),
+            }
+
+        except Exception as e:
+            print(f"❌ Error analyzing contract: {str(e)}")
+            return {"success": False, "error": str(e), "file_path": file_path}
 
     async def analyze_contract_from_do_spaces(self, file_key: str) -> Dict[str, Any]:
         """Download contract from DO Spaces and analyze it"""
@@ -75,6 +128,24 @@ class ContractAnalyzer:
         except Exception as e:
             print(f"❌ Error analyzing contract: {str(e)}")
             return {"success": False, "error": str(e), "file_key": file_key}
+
+    async def _extract_text_from_local_file(self, file_path: str) -> str:
+        """Extract text from local file"""
+        try:
+            file_extension = Path(file_path).suffix.lower()
+
+            if file_extension == ".pdf":
+                return self._extract_pdf_text(file_path)
+            elif file_extension in [".doc", ".docx"]:
+                return self._extract_docx_text(file_path)
+            elif file_extension == ".txt":
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    return f.read()
+            else:
+                raise Exception(f"Unsupported file type: {file_extension}")
+
+        except Exception as e:
+            raise Exception(f"Failed to extract text from {file_path}: {str(e)}")
 
     async def _download_and_extract_text(self, file_key: str) -> str:
         """Download file from DO Spaces and extract text"""
