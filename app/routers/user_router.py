@@ -17,30 +17,58 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     """
     Register a new user.
     """
-    # Check if user already exists
-    existing_user = db.query(User).filter(User.email == user.email).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+    print(f"DEBUG: Attempting to register user: {user.email}")
+    
+    try:
+        # Check if user already exists
+        existing_user = db.query(User).filter(User.email == user.email).first()
+        if existing_user:
+            print(f"DEBUG: User {user.email} already exists")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+        
+        # Hash the password
+        hashed_password = get_password_hash(user.password)
+        print(f"DEBUG: Password hashed successfully")
+        
+        # Create new user
+        new_user = User(
+            email=user.email,
+            hashed_password=hashed_password,
+            is_active=True
         )
-    
-    # Hash the password
-    hashed_password = get_password_hash(user.password)
-    
-    # Create new user
-    new_user = User(
-        email=user.email,
-        hashed_password=hashed_password,
-
-    )
-    
-    # Save to database
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    return UserResponse(id=new_user.id, email=new_user.email)
+        print(f"DEBUG: User object created: {new_user.email}")
+        
+        # Save to database
+        db.add(new_user)
+        print("DEBUG: User added to session")
+        
+        db.commit()
+        print("DEBUG: Transaction committed")
+        
+        db.refresh(new_user)
+        print(f"DEBUG: User refreshed - ID: {new_user.id}")
+        
+        # Verify user was saved
+        saved_user = db.query(User).filter(User.email == user.email).first()
+        if saved_user:
+            print(f"DEBUG: Verification successful - User {saved_user.id} found in database")
+        else:
+            print("ERROR: User not found after commit!")
+            raise HTTPException(status_code=500, detail="Failed to save user")
+        
+        return UserResponse(id=new_user.id, email=new_user.email)
+        
+    except HTTPException:
+        print("DEBUG: HTTPException occurred, rolling back")
+        db.rollback()
+        raise
+    except Exception as e:
+        print(f"ERROR: Unexpected error: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Registration failed")
 
 @router.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
